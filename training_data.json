@@ -11,6 +11,7 @@
         "can i book a design session?",
         "do you offer interior design help?",
         "can i visit your studio?",
+        "Can I visit you?",
         "i want to speak with a tile expert",
         "how can i meet your design team?",
         "do you offer design consultations?",
@@ -78,7 +79,33 @@
         "looking for navy kitchen tiles",
         "show me terracotta tiles"
       ]
-    },    
+    },
+    {
+      "intent": "search_non_tile_products",
+      "examples": [
+        "do you have plates?",
+        "i want a dinner plate",
+        "I want a set of plates",
+        "do you have mugs?",
+        "i want a mug",
+        "looking for a mug",
+        "do you have equipales?",
+        "i want an equipale for my patio",
+        "i need a keychain",
+        "4 piece dinner set",
+        "ceramic tableware",
+        "plates to gift",
+        "I want a complete set of dishes",
+        "do you have dinner plates?",
+        "i want a dinner plate",
+        "i’m looking for equipales for my patio",
+        "quiero un equipal",
+        "do you sell bowls?",
+        "quiero una taza",
+        "do you have mugs?",
+        "i want a mug"
+      ]
+    },           
     {
       "intent": "contact",
       "examples": [
@@ -97,6 +124,9 @@
         "my delivery came broken",
         "how can i reach you",
         "do you have a phone",
+        "give my your phone number",
+        "give me your email",
+        "can I have your email",
         "what's your email",
         "i want to speak to a supervisor",
         "who do I talk to about an order?",
@@ -105,7 +135,10 @@
         "I have a complaint",
         "what’s your customer service email?",
         "can I speak to someone?",
-        "how do I contact you?"
+        "how do I contact you?",
+        "i want to submit a job application",
+        "can I apply to a position",
+        "can I apply to a job with you"
       ]
     },
     {

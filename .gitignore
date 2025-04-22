@@ -1,0 +1,22 @@
+# Entornos virtuales
+venv/
+__pycache__/
+*.pyc
+
+# Datos sensibles
+google_credentials.json
+
+# Datos temporales o generados
+*.joblib
+*.json
+
+# Pero mantenemos estos JSON útiles
+!training_data.json
+!scraped_usages.json
+
+# Archivos de VS Code o Shell
+*.sh
+.vscode/
+
+# Archivos de logs o ejecución temporal
+*.txt

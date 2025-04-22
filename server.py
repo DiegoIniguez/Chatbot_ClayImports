@@ -34,6 +34,7 @@ shopify_store_url = os.getenv("SHOPIFY_STORE_URL")
 client = openai.OpenAI(api_key=api_key)
 
 PRODUCTS_CACHE_FILE = "cached_products.joblib"
+USAGE_CACHE_FILE = "scraped_usages.json"
 
 def get_cached_products(force_refresh=False):
     if not force_refresh:
@@ -46,6 +47,14 @@ def get_cached_products(force_refresh=False):
     products = get_shopify_products()
     joblib.dump(products, PRODUCTS_CACHE_FILE)
     return products
+
+try:
+    with open(USAGE_CACHE_FILE, "r") as f:
+        scraped_usages = json.load(f)
+    print(f"📂 USAGE cache cargado con {len(scraped_usages)} entradas.")
+except:
+    scraped_usages = {}
+    print("⚠️ No se pudo cargar scraped_usages.json")
 
 
 # Memoria por sesión con duración limitada (1 hora)
@@ -212,8 +221,10 @@ def search_shopify_blogs(user_message, session_id="default", user_message_count=
     try:
         print("🧠 Llamando a OpenAI para intro de blogs...")
         prompt = (
-            "You are a helpful assistant. Generate a short, friendly introduction to a list of blog articles based on the following customer message:\n\n"
-            f"{user_message}"
+            "You are a helpful assistant. Generate a very short, friendly introduction to a list of blog articles.\n"
+            "The customer asked:\n"
+            f"{user_message}\n\n"
+            "Your response must sound natural and be no more than 20 words total. Do not mention blog titles or products."
         )
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -227,7 +238,7 @@ def search_shopify_blogs(user_message, session_id="default", user_message_count=
         intro_text = "Here are some blog articles you might find helpful:"
 
    # 📰 Construir respuesta final
-    response_text = f"{intro_text}<br>"
+    response_text = f"{intro_text}<br><br>"
     for b in top_blogs:
         title = b["title"]
         text = b.get("content", "")
@@ -312,6 +323,14 @@ def normalize(text):
             .strip()
     )
 
+def clean_title(title):
+    title = title.lower()
+    title = re.sub(r'\|.*$', '', title)  # corta todo después del "|"
+    title = re.sub(r'(\d+)\s*["’]?\s*[x×]\s*(\d+)', r'\1x\2', title)  # 4" x 4" → 4x4
+    title = re.sub(r'[^a-z0-9\s\.x]', '', title)  # remueve simbolitos
+    title = re.sub(r'\s+', ' ', title)  # espacios dobles
+    return title.strip()
+
 
 def summarize_product_description(description):
     """Genera un resumen corto de la descripción del producto."""
@@ -335,7 +354,7 @@ def summarize_product_description(description):
         return "A great choice!"
 
 
-def get_product_recommendations(user_message, context=None, session_id="default", user_message_count=0):
+def get_product_recommendations(user_message, intent=None, context=None, session_id="default", user_message_count=0):
     products = get_cached_products()
     if not products:
         return "Sorry, we currently have no products available."
@@ -482,20 +501,35 @@ def get_product_recommendations(user_message, context=None, session_id="default"
     normalized_user_message = normalize(user_message)
     print(f"🔍 Buscando: {normalized_user_message}")
 
+    # 🛑 Palabras que indican que NO es tile (excepto que el user lo pida)
+    non_tile_keywords = ["plate", "mug", "keychain", "rental", "set", "equipal", "chair", "bowl", "spoon", "fork"]
+
     for product in products:
         raw_title = product.get('title') or ""
-        normalized_title = normalize(raw_title)
+        normalized_title = clean_title(raw_title)
+
+        is_non_tile_product = any(word in normalized_title for word in non_tile_keywords)
+
+        # 🚫 Si es una búsqueda de azulejos normales, filtramos vajilla
+        if intent == "search_product" and is_non_tile_product:
+            print(f"🚫 Saltando producto no-tile (por intención): {raw_title}")
+            continue
+
         description = (product.get('body_html') or '').lower()
         if not description:
             description = "This is a beautiful product available in our store. Feel free to explore more details!"
 
         tags = [(tag or "").strip().lower() for tag in (product.get("tags") or "").split(",")]
+        handle = product.get("handle")
 
         if "sample" in normalized_title or any("sample" in tag for tag in tags):
             continue
 
         if product['handle'] in shown_handles:
-            continue  # 🚫 Ya mostrado en esta sesión
+            continue
+
+        # 🔥 USAGE desde JSON por título exacto
+        usage = scraped_usages.get(handle.strip(), "").strip()
 
         # ⛔ Si no tiene todos los tags requeridos, lo ignoramos
         if required_tags:
@@ -516,6 +550,8 @@ def get_product_recommendations(user_message, context=None, session_id="default"
                 match_score += 4
             if kw in ["backsplash", "kitchen"]:
                 match_score += 1
+            if usage and kw in usage.lower():  # 👈 NUEVO: match en USAGE
+                match_score += 2
 
         if len(description) < 40:
             match_score -= 2
@@ -528,18 +564,27 @@ def get_product_recommendations(user_message, context=None, session_id="default"
         else:
             similarity = SequenceMatcher(None, normalized_user_message, normalized_title).ratio()
 
+        # 🎯 BOOST si es búsqueda de vajilla y el producto es vajilla
+        if intent == "search_non_tile_products":
+            if is_non_tile_product:
+                match_score += 15
+                print(f"💪 BOOST: {raw_title} → +15 por ser no-tile")
+            else:
+                match_score -= 5
+                print(f"⛔ Penalizado (tile no deseado): {raw_title} → -5")
+
         print(f"✅ Título normalizado: {normalized_title}")
         print(f"✅ Mensaje normalizado: {normalized_user_message}")
         print(f"✅ Todas las palabras presentes: {all_words_match}")
         print(f"🎯 Similaridad calculada: {similarity:.2f}")
         print(f"📌 Match Score de '{raw_title.strip()}': {match_score}")
+        if usage:
+            print(f"🧠 USAGE encontrado: {usage[:80]}...")
 
-        # ✅ Escoge el mejor producto solo si el score es bueno y similaridad también
         if match_score > 0:
             product["match_score"] = match_score
             relevant_products.append(product)
 
-            # Aquí está la lógica mejorada: evitamos que se sobrescriba con uno irrelevante
             if similarity > best_similarity and match_score >= 10:
                 best_similarity = similarity
                 best_match_product = product
@@ -552,6 +597,12 @@ def get_product_recommendations(user_message, context=None, session_id="default"
         print(f"🏷️ Tags: {(best_match_product.get('tags') or '').lower()}")
         print(f"📛 Handle: {best_match_product.get('handle')}")
         print(f"📄 Title: {best_match_product.get('title')}")
+
+    print("📊 TOP productos relevantes:")
+    for p in sorted(relevant_products, key=lambda x: -x.get("match_score", 0))[:5]:
+        print(f"- {p['title']} → score: {p.get('match_score')} | handle: {p.get('handle')}")
+        if p['title'].strip() in scraped_usages:
+            print(f"  🧠 USAGE: {scraped_usages[p['title'].strip()][:60]}...")
 
 
     if best_match_product and (best_similarity > 0.7 or best_match_product.get("match_score", 0) >= 18):
@@ -566,13 +617,26 @@ def get_product_recommendations(user_message, context=None, session_id="default"
             shown_products = session_data.setdefault("shown_products", set())
             shown_products.add(best_match_product["handle"])
 
-            return (
-                f"Yes! We have <b>{best_match_product['title']}</b>.<br>{description}<br>"
-                f"<a href='{product_url}' target='_blank' style='color: #007bff; text-decoration: underline;'>View product</a>"
+            image_url = best_match_product.get("image", {}).get("src", "")
+            tag_list = (best_match_product.get("tags") or "").lower().split(",")
+            emojis = " ".join(
+                sorted(set(
+                    tag_emojis.get(tag.strip(), tag_emojis.get("default", "🧩"))
+                    for tag in tag_list if tag.strip()
+                ))
             )
-            
+
+            return f"""Yes! We have <b>{best_match_product['title']}</b>.
+            <div class="product-card" style="max-width: 280px; border: 1px solid #ccc; border-radius: 12px; padding: 12px; text-align: center; background: #fff;">
+                <img src="{image_url}" alt="{best_match_product['title']}" style="max-width: 100%; height: auto; border-radius: 8px;" />
+                <h4 style="margin: 10px 0 4px;">{emojis} {best_match_product['title']}</h4>
+                <p style="font-size: 0.9rem; color: #333;">{description}</p>
+                <a href="{product_url}" target="_blank" style="color: #007bff; text-decoration: underline; font-weight: bold;">View product</a>
+            </div>"""
+
         else:
             print(f"🚫 Mejor match descartado por ser muestra: {best_match_product['title']}")
+
 
 
     def is_sample_product(product):
@@ -776,7 +840,13 @@ def chat():
             elif last_intent == "search_product":
                 last_query = session_data.get("last_product_query")
                 if last_query:
-                    response_text = get_product_recommendations(last_query, session_id=session_id, user_message_count=user_message_count)
+                    response_text = get_product_recommendations(
+                        last_query,
+                        intent="search_product",
+                        session_id=session_id,
+                        user_message_count=user_message_count
+                    )
+
                     intent = "search_product"
 
             if not response_text:
@@ -797,11 +867,17 @@ def chat():
 
 
         # Lógica según la intención
-        if intent == "search_product":
-            print("🪴 Intent: search_product")
+        if intent in ["search_product", "search_non_tile_products"]:
+            print(f"🪴 Intent: {intent}")
             session_memory.setdefault(session_id, {})["last_product_query"] = user_message
             session_memory[session_id]["last_intent"] = "search_product"
-            response_text = get_product_recommendations(user_message, context=context_tag, session_id=session_id, user_message_count=user_message_count)
+            response_text = get_product_recommendations(
+                user_message,
+                intent=intent,
+                context=context_tag,
+                session_id=session_id,
+                user_message_count=user_message_count
+            )
 
         elif intent == "search_blog":
             print("📰 Intent: search_blog (from articles.json)")

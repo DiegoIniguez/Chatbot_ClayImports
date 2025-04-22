@@ -19,7 +19,7 @@ def get_all_blog_ids():
     print(f"❌ Error fetching blog list: {response.status_code}")
     return []
 
-def get_blog_articles(blog_id):
+def get_blog_articles(blog_id, blog_handle):
     all_articles = []
     base_url = f"{SHOPIFY_STORE_URL}/admin/api/2024-01/blogs/{blog_id}/articles.json?limit=250"
     url = base_url
@@ -38,7 +38,7 @@ def get_blog_articles(blog_id):
                     "content": art.get("body_html"),
                     "tags": art.get("tags"),
                     "author": art.get("author"),
-                    "url": f"{SHOPIFY_STORE_URL}/blogs/news/{art.get('handle')}"
+                    "url": f"{SHOPIFY_STORE_URL}/blogs/{blog_handle}/{art.get('handle')}"
                 })
 
         link_header = response.headers.get("Link", "")
@@ -61,6 +61,17 @@ if __name__ == "__main__":
     blog_ids = get_all_blog_ids()
     for blog_id in blog_ids:
         print(f"🔍 Fetching articles for blog ID {blog_id}")
-        all_articles.extend(get_blog_articles(blog_id))
+
+        # Obtener el handle del blog
+        blog_resp = requests.get(f"{SHOPIFY_STORE_URL}/admin/api/2024-01/blogs/{blog_id}.json", headers=HEADERS)
+        if blog_resp.status_code != 200:
+            print(f"❌ Could not get blog handle for {blog_id}")
+            continue
+
+        blog_handle = blog_resp.json().get("blog", {}).get("handle", "news")
+
+        # Obtener artículos con ese handle
+        articles = get_blog_articles(blog_id, blog_handle)
+        all_articles.extend(articles)
 
     save_articles(all_articles)
