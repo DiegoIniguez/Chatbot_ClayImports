@@ -1,22 +1,17 @@
-# Entornos virtuales
+# 🧹 Entornos virtuales y caché
 venv/
 __pycache__/
 *.pyc
 
-# Datos sensibles
-google_credentials.json
-
-# Datos temporales o generados
+# 📦 Archivos de modelo y caché
 *.joblib
+embedding_cache*
+*.log
+*.txt
+
+# 📄 Archivos JSON generados automáticos
 *.json
 
-# Pero mantenemos estos JSON útiles
+# ❗ Excepciones que sí quieres incluir en el repo:
 !training_data.json
 !scraped_usages.json
-
-# Archivos de VS Code o Shell
-*.sh
-.vscode/
-
-# Archivos de logs o ejecución temporal
-*.txt
