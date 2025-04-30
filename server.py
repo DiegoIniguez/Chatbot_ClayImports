@@ -18,7 +18,7 @@ from cachetools import TTLCache
 from page_scraper import find_best_shopify_pages, get_full_page_text, summarize_page_content
 from smart_page_router import search_shopify_pages
 from utils import get_shopify_pages
-
+from faq_support.faq_search import search_faq_semantic
 
 app = Flask(__name__)
 CORS(app)
@@ -30,32 +30,64 @@ def home():
 api_key = os.getenv("OPENAI_API_KEY")
 shopify_access_token = os.getenv("SHOPIFY_API_KEY")
 shopify_store_url = os.getenv("SHOPIFY_STORE_URL")
+headers = {"X-Shopify-Access-Token": shopify_access_token}
 
 client = openai.OpenAI(api_key=api_key)
 
-PRODUCTS_CACHE_FILE = "cached_products.joblib"
-USAGE_CACHE_FILE = "scraped_usages.json"
+COLLECTIONS_CACHE_FILE = "cached_collections.joblib"
 
-def get_cached_products(force_refresh=False):
+def get_cached_collections(force_refresh=False):
     if not force_refresh:
         try:
-            return joblib.load(PRODUCTS_CACHE_FILE)
+            return joblib.load(COLLECTIONS_CACHE_FILE)
         except:
             pass
 
-    print("💾 Cache no encontrada o forzada. Cargando productos desde Shopify...")
-    products = get_shopify_products()
-    joblib.dump(products, PRODUCTS_CACHE_FILE)
-    return products
+    print("💾 Cache no encontrada o forzada. Cargando colecciones desde Shopify...")
+    collections = []
+    endpoints = ["custom_collections", "smart_collections"]
 
-try:
-    with open(USAGE_CACHE_FILE, "r") as f:
-        scraped_usages = json.load(f)
-    print(f"📂 USAGE cache cargado con {len(scraped_usages)} entradas.")
-except:
-    scraped_usages = {}
-    print("⚠️ No se pudo cargar scraped_usages.json")
+    for endpoint in endpoints:
+        url = f"{shopify_store_url}/admin/api/2024-01/{endpoint}.json?limit=250"
+        while url:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json().get(endpoint, [])
+                collections.extend(data)
 
+                link_header = response.headers.get("Link", "")
+                if 'rel="next"' in link_header:
+                    parts = link_header.split(",")
+                    next_link = [p.split(";")[0].strip("<> ") for p in parts if 'rel="next"' in p]
+                    url = next_link[0] if next_link else None
+                else:
+                    url = None
+            else:
+                print(f"❌ Error fetching {endpoint}: {response.status_code}")
+                break
+
+    print(f"✅ Total collections fetched: {len(collections)}")
+    joblib.dump(collections, COLLECTIONS_CACHE_FILE)
+    return collections
+
+
+def should_refresh_collections():
+    try:
+        file_path = "cached_collections.joblib"
+        if not os.path.exists(file_path):
+            print("🆕 No cached collections found. Will refresh.")
+            return True
+        file_age_seconds = time.time() - os.path.getmtime(file_path)
+        file_age_days = file_age_seconds / (60 * 60 * 24)
+        if file_age_days > 7:
+            print(f"🔁 Cached collections are {file_age_days:.1f} days old. Refreshing...")
+            return True
+        else:
+            print(f"🗂️ Cached collections are fresh ({file_age_days:.1f} days old). No refresh needed.")
+            return False
+    except Exception as e:
+        print(f"❌ Error checking cache age: {e}")
+        return True
 
 # Memoria por sesión con duración limitada (1 hora)
 session_memory = TTLCache(maxsize=1000, ttl=3600)  # 1000 sesiones, expiran a la hora
@@ -251,77 +283,13 @@ def search_shopify_blogs(user_message, session_id="default", user_message_count=
 
     return response_text
 
-
-
-def get_shopify_products():
-    """Obtiene TODOS los productos activos de Shopify con paginación."""
-    url = f"{shopify_store_url}/admin/api/2024-01/products.json?limit=250&status=active&fields=id,title,handle,body_html,tags,product_type,variants,image"
-    headers = {"X-Shopify-Access-Token": shopify_access_token}
-
-    all_products = []
-    page_counter = 1
-
-    while url:
-        print(f"📦 Fetching page {page_counter} of products...")
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            print(f"⚠️ Shopify error: {response.status_code}")
-            break
-
-        products = response.json().get("products", [])
-        print(f"🧩 Found {len(products)} products in this page.")
-        all_products.extend(products)
-
-        # Shopify paginación vía header Link
-        link_header = response.headers.get("Link", "")
-        if 'rel="next"' in link_header:
-            parts = link_header.split(",")
-            next_link = None
-            for part in parts:
-                if 'rel="next"' in part:
-                    next_link = part.split(";")[0].strip("<> ")
-            url = next_link
-            page_counter += 1
-        else:
-            url = None
-
-    print(f"✅ Total active products fetched: {len(all_products)}")
-
-    # Filtrar solo productos con al menos una variante disponible (con inventario > 0)
-    available_products = []
-    for product in all_products:
-        for variant in product["variants"]:
-            if variant["inventory_quantity"] > 0:
-                available_products.append(product)
-                break
-
-    print(f"✅ Total available products with inventory: {len(available_products)}")
-    return available_products
-
-
-
-def is_ask_for_more(message):
-    phrases = [
-        "more", "show me more", "give me more", "another one", "something else",
-        "share more", "display more", "share me more"
-    ]
-    return any(p in message.lower() for p in phrases)
-
-
 def normalize(text):
+    if not isinstance(text, str):
+        text = ""
     text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'(\d+)\s*["’]?\s*[x×]\s*(\d+)', r'\1x\2', text)
-    return (
-        text.lower()
-            .replace('"', '')
-            .replace("'", '')
-            .replace("’", '')
-            .replace("“", '')
-            .replace("”", '')
-            .replace("×", "x")
-            .replace("  ", " ")
-            .strip()
-    )
+    text = text.lower().strip()
+    return text
+
 
 def clean_title(title):
     title = title.lower()
@@ -332,415 +300,107 @@ def clean_title(title):
     return title.strip()
 
 
-def summarize_product_description(description):
-    """Genera un resumen corto de la descripción del producto."""
-    try:
-        if not description or len(description) < 10:
-            return "A great choice!"
+def get_collection_recommendations(user_message, session_id="default", user_message_count=0):
+    collections = get_cached_collections()
+    if not collections:
+        return "Sorry, no collections available."
 
-        print("🧠 Llamando a OpenAI para generar resumen...")
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "Summarize the following product description in one short sentence:"},
-                {"role": "user", "content": description}
-            ],
-            max_tokens=50,
-            temperature=0.5
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"❌ Error al resumir descripción: {e}")
-        return "A great choice!"
+    user_keywords = normalize(user_message).split()
+    shown_handles = session_memory.get(session_id, {}).get("shown_collections", set())
+    scored_collections = []
 
+    for coll in collections:
+        title = normalize(coll.get("title", ""))
+        body = normalize(coll.get("body_html", ""))
+        tags = [tag.strip().lower() for tag in coll.get("tags", "").split(",")]
+        handle = coll.get("handle")
+        image_url = coll.get("image", {}).get("src", "")
 
-def get_product_recommendations(user_message, intent=None, context=None, session_id="default", user_message_count=0):
-    products = get_cached_products()
-    if not products:
-        return "Sorry, we currently have no products available."
+        if not image_url:
+            continue  # ❌ Saltar colecciones sin imagen
 
+        if coll.get("product_count", 0) == 0:
+            continue  # ❌ Saltar colecciones vacías
 
-    # 🎨 Diccionario de emojis por tag
-    tag_emojis = {
-        # Uso
-        "usage_kitchen": "🍽️",
-        "usage_bathroom": "🚿",
-        "usage_interior": "🏠",
-
-        # Colores
-        "color_terracotta": "🧱",
-        "color_white": "⚪",
-        "color_black": "⚫",
-        "color_blue": "🔵",
-        "color_green": "🟢",
-        "color_navy": "🌊",
-        "color_beige": "🟤",
-        "color_brown": "🪵",
-        "color_grey": "⬜",
-        "color_pink": "🌸",
-        "color_yellow": "🌞",
-
-        # Acabados
-        "finish_matte": "🪨",
-        "finish-glossy": "💎",
-        "finish-satin-sealed": "✨",
-        "finish-raw": "🌿",
-        "finish-natural": "🍃",
-
-        # Formas
-        "tileshape_hexagon": "⬡",
-        "tileshape_circle": "⭕",
-        "tileshape_square": "◼️",
-        "tileshape_rectangle": "⬛",
-        "tileshape_2x6": "➖",
-        "tileshape_3x3": "〰️",
-
-        # Estilo
-        "style_modern": "🧊",
-        "style_handmade": "🖐️",
-        "style_natural": "🌿",
-        "style_rustic": "🌾",
-
-        # Materiales
-        "material_clay": "🏺",
-        "material_cement": "🧱",
-        "breeze_blocks": "🧱",
-        "material_concrete": "🏗️",
-        "material_ceramic": "🔷",
-        "material_terracotta": "🧡",
-
-        # Default
-        "default": "🧩"
-    }
-
-
-    user_message = user_message.lower().strip()
-
-    # 🔗 Mapeo de palabras clave comunes a tags
-    tag_filters = {
-        # Uso
-        "kitchen": "usage_kitchen",
-        "bathroom": "usage_bathroom",
-        "interior": "usage_interior",
-        "shower": "usage_bathroom",
-        "backsplash": "usage_kitchen",
-        "restaurant": "usage_interior",
-
-        # Colores comunes
-        "terracotta": "color_terracotta",
-        "burnt orange": "color_terracotta",
-        "earthy": "color_terracotta",
-        "white": "color_white",
-        "black": "color_black",
-        "blue": "color_blue",
-        "green": "color_green",
-        "navy": "color_navy",
-        "beige": "color_beige",
-        "brown": "color_brown",
-        "grey": "color_grey",
-        "pink": "color_pink",
-        "yellow": "color_yellow",
-
-        # Acabados
-        "matte": "finish_matte",
-        "glossy": "finish_glossy",
-        "satin": "finish-satin-sealed",
-        "sealed": "finish-satin-sealed",
-        "natural finish": "finish-natural",
-        "natural clay": "material_terracotta",
-        "rough": "finish-raw",
-
-        # Formas
-        "hexagon": "tileshape_hexagon",
-        "circle": "tileshape_circle",
-        "square": "tileshape_square",
-        "rectangle": "tileshape_rectangle",
-        "2x6": "tileshape_2x6",
-        "3x3": "tileshape_3x3",
-
-        # Estilo
-        "modern": "style_modern",
-        "handmade": "style_handmade",
-        "natural": "style_natural",
-        "rustic": "style_rustic",
-        "handcrafted": "style_handmade",
-
-        # Material
-        "clay": "material_clay",
-        "cement": "material_cement",
-        "concrete": "material_concrete",
-        "ceramic": "material_ceramic",
-        "terracotta material": "material_terracotta",
-    }
-
-
-    keywords = user_message.split()
-
-    # 🎯 Detectar tags que deben estar presentes
-    required_tags = set()
-    for word in keywords:
-        tag = tag_filters.get(word.strip())
-        if tag:
-            required_tags.add(tag)
-
-    # 🔍 Añadir palabras clave según contexto detectado
-    if context:
-        context_keywords = {
-            "kitchen": ["kitchen", "backsplash", "cook", "usage_kitchen"],
-            "bathroom": ["bathroom", "shower", "sink", "usage_bathroom"],
-            "restaurant": ["restaurant", "bar", "counter", "usage_interior"]
-        }
-        keywords += context_keywords.get(context, [])
-
-    relevant_products = []
-    shown_handles = session_memory.get(session_id, {}).get("shown_products", set())
-
-    best_match_product = None
-    best_similarity = 0.0
-
-    normalized_user_message = normalize(user_message)
-    print(f"🔍 Buscando: {normalized_user_message}")
-
-    # 🛑 Palabras que indican que NO es tile (excepto que el user lo pida)
-    non_tile_keywords = ["plate", "mug", "keychain", "rental", "set", "equipal", "chair", "bowl", "spoon", "fork"]
-
-    for product in products:
-        raw_title = product.get('title') or ""
-        normalized_title = clean_title(raw_title)
-
-        is_non_tile_product = any(word in normalized_title for word in non_tile_keywords)
-
-        # 🚫 Si es una búsqueda de azulejos normales, filtramos vajilla
-        if intent == "search_product" and is_non_tile_product:
-            print(f"🚫 Saltando producto no-tile (por intención): {raw_title}")
+        if handle in shown_handles:
             continue
-
-        description = (product.get('body_html') or '').lower()
-        if not description:
-            description = "This is a beautiful product available in our store. Feel free to explore more details!"
-
-        tags = [(tag or "").strip().lower() for tag in (product.get("tags") or "").split(",")]
-        handle = product.get("handle")
-
-        if "sample" in normalized_title or any("sample" in tag for tag in tags):
-            continue
-
-        if product['handle'] in shown_handles:
-            continue
-
-        # 🔥 USAGE desde JSON por título exacto
-        usage = scraped_usages.get(handle.strip(), "").strip()
-
-        # ⛔ Si no tiene todos los tags requeridos, lo ignoramos
-        if required_tags:
-            tag_matches = sum(1 for req in required_tags if req in tags)
-            if tag_matches < max(1, len(required_tags) - 1):
-                continue
 
         match_score = 0
-
-        for kw in keywords:
-            kw = kw.strip().lower()
-
-            if kw in normalized_title:
-                match_score += 3
-            if kw in description:
-                match_score += 2
-            if any(kw in tag.strip() for tag in tags):
+        for word in user_keywords:
+            if word in title:
+                match_score += 5
+            if word in tags:
                 match_score += 4
-            if kw in ["backsplash", "kitchen"]:
-                match_score += 1
-            if usage and kw in usage.lower():  # 👈 NUEVO: match en USAGE
+            if word in body:
                 match_score += 2
 
-        if len(description) < 40:
-            match_score -= 2
+        # NUEVO: matching por títulos de productos relacionados
+        product_titles = [pt.lower() for pt in coll.get("product_titles", [])]
+        for word in user_keywords:
+            if any(word in pt for pt in product_titles):
+                match_score += 3  # o el peso que tú creas justo
 
-        all_words_match = all(word in normalized_title for word in normalized_user_message.split())
+        similarity = SequenceMatcher(None, normalize(user_message), title).ratio()
 
-        if all_words_match:
-            similarity = 1.0
-            match_score += 10
-        else:
-            similarity = SequenceMatcher(None, normalized_user_message, normalized_title).ratio()
+        scored_collections.append({
+            "collection": coll,
+            "score": match_score,
+            "similarity": similarity
+        })
 
-        # 🎯 BOOST si es búsqueda de vajilla y el producto es vajilla
-        if intent == "search_non_tile_products":
-            if is_non_tile_product:
-                match_score += 15
-                print(f"💪 BOOST: {raw_title} → +15 por ser no-tile")
-            else:
-                match_score -= 5
-                print(f"⛔ Penalizado (tile no deseado): {raw_title} → -5")
+    top_collections = sorted(scored_collections, key=lambda x: (-x["score"], -x["similarity"]))[:3]
 
-        print(f"✅ Título normalizado: {normalized_title}")
-        print(f"✅ Mensaje normalizado: {normalized_user_message}")
-        print(f"✅ Todas las palabras presentes: {all_words_match}")
-        print(f"🎯 Similaridad calculada: {similarity:.2f}")
-        print(f"📌 Match Score de '{raw_title.strip()}': {match_score}")
-        if usage:
-            print(f"🧠 USAGE encontrado: {usage[:80]}...")
+    if not top_collections:
+        return "We couldn't find any matching collections. 😢"
 
-        if match_score > 0:
-            product["match_score"] = match_score
-            relevant_products.append(product)
+    session_data = session_memory.setdefault(session_id, {})
+    shown_collections = session_data.setdefault("shown_collections", set())
+    shown_collections.update(c["collection"]["handle"] for c in top_collections)
 
-            if similarity > best_similarity and match_score >= 10:
-                best_similarity = similarity
-                best_match_product = product
-
-
-
-    print(f"👁️‍🗨️ MEJOR MATCH ACTUAL: {best_match_product['title'] if best_match_product else 'None'}")
-    print(f"📊 SIMILITUD: {best_similarity:.2f}")
-    if best_match_product:
-        print(f"🏷️ Tags: {(best_match_product.get('tags') or '').lower()}")
-        print(f"📛 Handle: {best_match_product.get('handle')}")
-        print(f"📄 Title: {best_match_product.get('title')}")
-
-    print("📊 TOP productos relevantes:")
-    for p in sorted(relevant_products, key=lambda x: -x.get("match_score", 0))[:5]:
-        print(f"- {p['title']} → score: {p.get('match_score')} | handle: {p.get('handle')}")
-        if p['title'].strip() in scraped_usages:
-            print(f"  🧠 USAGE: {scraped_usages[p['title'].strip()][:60]}...")
-
-
-    if best_match_product and (best_similarity > 0.7 or best_match_product.get("match_score", 0) >= 18):
-        title = best_match_product.get("title", "").lower()
-        tags = (best_match_product.get("tags", "") or "").lower()
-
-        if "sample" not in title and "sample" not in tags:
-            print(f"🎯 MATCH POR SIMILITUD: {best_match_product['title']} (score: {best_similarity:.2f})")
-            description = summarize_product_description(best_match_product.get('body_html') or "")
-            product_url = f"{shopify_store_url}/products/{best_match_product['handle']}"
-            session_data = session_memory.setdefault(session_id, {})
-            shown_products = session_data.setdefault("shown_products", set())
-            shown_products.add(best_match_product["handle"])
-
-            image_url = best_match_product.get("image", {}).get("src", "")
-            tag_list = (best_match_product.get("tags") or "").lower().split(",")
-            emojis = " ".join(
-                sorted(set(
-                    tag_emojis.get(tag.strip(), tag_emojis.get("default", "🧩"))
-                    for tag in tag_list if tag.strip()
-                ))
-            )
-
-            return f"""Yes! We have <b>{best_match_product['title']}</b>.
-            <div class="product-card" style="max-width: 280px; border: 1px solid #ccc; border-radius: 12px; padding: 12px; text-align: center; background: #fff;">
-                <img src="{image_url}" alt="{best_match_product['title']}" style="max-width: 100%; height: auto; border-radius: 8px;" />
-                <h4 style="margin: 10px 0 4px;">{emojis} {best_match_product['title']}</h4>
-                <p style="font-size: 0.9rem; color: #333;">{description}</p>
-                <a href="{product_url}" target="_blank" style="color: #007bff; text-decoration: underline; font-weight: bold;">View product</a>
-            </div>"""
-
-        else:
-            print(f"🚫 Mejor match descartado por ser muestra: {best_match_product['title']}")
-
-
-
-    def is_sample_product(product):
-        title = product.get("title", "").lower()
-        tags = (product.get("tags", "") or "").lower()
-        return "sample" in title or "sample" in tags
-
-    if relevant_products:
-        sorted_products = sorted(relevant_products, key=lambda x: -x["match_score"])
-        selected = [p for p in sorted_products if p["handle"] not in shown_handles and not is_sample_product(p)][:3]
-        session_data = session_memory.setdefault(session_id, {})
-        shown_products = session_data.setdefault("shown_products", set())
-        shown_products.update(p["handle"] for p in selected)
-
-        # ✅ Generar intro natural con OpenAI
-        try:
-            print("🧠 Llamando a OpenAI para la introducción...")
-            is_early_convo = user_message_count < 2
-            prompt = (
-                "You are a helpful assistant for a tile store. Based on the customer message, generate "
-                + ("a short, friendly intro with a warm greeting. "
-                if is_early_convo else
-                "a short intro without any greeting. ")
-                + "Include relevant details like color, finish, shape, or usage (e.g. kitchen, bathroom), if mentioned. "
-                "Do not list products. Just introduce the upcoming list in a friendly way.\n\n"
-                "Your response must be natural and **no more than 20 words**.\n\n"
-                f"Customer said: {user_message}"
-            )
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "system", "content": prompt}],
-                max_tokens=50,
-                temperature=0.7
-            )
-            intro_text = response.choices[0].message.content.strip()
-        except Exception as e:
-            print(f"⚠️ OpenAI intro failed: {e}")
-            intro_text = "Here are some great tiles you might like!"
-            import traceback
-            traceback.print_exc()
-
-
-        response_text = f"{intro_text}<br>"
-
-    else:
-        selected = [
-            p for p in products
-            if p["handle"] not in shown_handles
-            and "sample" not in (p["title"] or "").lower()
-            and "sample" not in (p.get("tags") or "").lower()
-        ]   
-        selected = random.sample(selected, min(3, len(selected)))
-        session_data = session_memory.setdefault(session_id, {})
-        shown_products = session_data.setdefault("shown_products", set())
-        shown_products.update(p["handle"] for p in selected)
-
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "You are a friendly assistant helping a customer find the best products based on their request. Generate a short introduction that smoothly leads into product suggestions."},
-                    {"role": "user", "content": f"The customer asked: {user_message}"}
-                ],
-                max_tokens=50,
-                temperature=0.7
-            )
-            intro_text = response.choices[0].message.content.strip()
-        except Exception as e:
-            print(f"⚠️ OpenAI intro failed: {e}")
-            intro_text = "Here are some great options you might like!"
-
-        response_text = f"{intro_text}<br>"
-
-    response_text += '<div class="product-carousel" style="display: flex; gap: 20px; overflow-x: auto; padding: 10px 0;">'
-
-    for p in selected:
-        title = p['title']
-        description = summarize_product_description(p.get('body_html', ''))
-        product_url = f"{shopify_store_url}/products/{p['handle']}"
-        tags = (p.get("tags") or "").lower().split(",")
-        image_url = p.get("image", {}).get("src", "")
-
-        # 🧩 Convertimos tags a emojis
-        emojis = " ".join(
-            sorted(set(
-                tag_emojis.get(tag.strip(), tag_emojis.get("default", "🧩"))
-                for tag in tags if tag.strip()
-            ))
+    # 🔥 Generar introducción usando OpenAI
+    try:
+        prompt = (
+            "You are a friendly tile store assistant. Based on the customer's message, "
+            "generate a short intro (under 20 words) presenting tile collections "
+            "without listing collection names. Mention style, color or usage if possible.\n\n"
+            f"Customer message:\n{user_message}"
         )
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": prompt}],
+            max_tokens=50,
+            temperature=0.7
+        )
+        intro_text = response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"⚠️ OpenAI intro failed: {e}")
+        intro_text = "Here are some collections you might love!"
+
+    # 🛠️ Construir respuesta visual
+    response_text = f"{intro_text}<br><div class='product-carousel' style='display: flex; gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 10px 0;'>"
+
+    for item in top_collections:
+        coll = item["collection"]
+        title = coll.get("title", "Untitled Collection")
+        handle = coll.get("handle", "#")
+        raw_body = coll.get("body_html", "") or ""
+        description = re.sub('<[^<]+?>', '', raw_body)  # Limpia etiquetas HTML
+        description = description.strip()[:100] + "..." if description else "Explore this collection."
+        image_url = coll.get("image", {}).get("src", "") or "https://via.placeholder.com/240x240.png?text=No+Image"
+        collection_url = f"{shopify_store_url}/collections/{handle}"
 
         response_text += f"""
-        <div class="product-card" style="flex: 0 0 220px; border: 1px solid #ccc; border-radius: 12px; padding: 12px; text-align: center; background: #fff;">
-            <img src="{image_url}" alt="{title}" style="max-width: 100%; height: auto; border-radius: 8px;" />
-            <h4 style="margin: 10px 0 4px;">{emojis} {title}</h4>
-            <p style="font-size: 0.9rem; color: #333;">{description}</p>
-            <a href="{product_url}" target="_blank" style="color: #007bff; text-decoration: underline; font-weight: bold;">View product</a>
+        <div class="product-card" style="flex: 0 0 240px; scroll-snap-align: start; border: 1px solid #ccc; border-radius: 12px; padding: 12px; text-align: center; background: #fff;">
+            <img src="{image_url}" alt="{title}" style="max-width: 100%; height: auto; border-radius: 8px; margin-bottom: 10px;" />
+            <h4 style="margin: 10px 0 4px; font-size: 1rem; color: #222;">{title}</h4>
+            <p style="font-size: 0.85rem; color: #555; height: 48px; overflow: hidden;">{description}</p>
+            <a href="{collection_url}" target="_blank" style="display: inline-block; margin-top: 10px; padding: 6px 12px; background-color: #007bff; color: #fff; border-radius: 6px; text-decoration: none; font-weight: bold;">View Collection</a>
         </div>
         """
 
     response_text += "</div>"
 
     return response_text
-
-
 
 def detect_context(user_message):
     """Detecta si el usuario pregunta sobre un espacio específico (cocina, baño, restaurante, etc.)."""
@@ -767,7 +427,7 @@ def is_irrelevant_question(query):
 def ask_openai(question, context=""):
     try:
         if is_irrelevant_question(question):
-            return "I'm here to help you with information about our store! 😊 Ask me about our products, policies, blogs, or anything related to our store."
+            return "I'm here to help you with information about our store! 😊 Ask me about our collections, policies, blogs, or anything related to our store."
         
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -828,35 +488,6 @@ def chat():
 
         intent = classify_intent(user_message)
 
-        if is_ask_for_more(user_message):
-            session_data = session_memory.get(session_id, {})
-            last_intent = session_data.get("last_intent")
-            
-            if last_intent == "search_blog":
-                last_query = session_data.get("last_blog_query")
-                if last_query:
-                    response_text = search_shopify_blogs(user_message, blog_articles, session_id=session_id, user_message_count=user_message_count)
-                    intent = "search_blog"
-            elif last_intent == "search_product":
-                last_query = session_data.get("last_product_query")
-                if last_query:
-                    response_text = get_product_recommendations(
-                        last_query,
-                        intent="search_product",
-                        session_id=session_id,
-                        user_message_count=user_message_count
-                    )
-
-                    intent = "search_product"
-
-            if not response_text:
-                response_text = "Let me know what you'd like to see more of – products, blogs, or something else!"
-
-            print("🔁 Intent: ask_for_more — using previous query")
-            log_user_interaction(user_message, response_text, intent)
-            return jsonify({"answer": response_text, "intent": intent})
-
-
         print("🎯 Detected intent:", intent)
 
         context_tag = detect_context(user_message)
@@ -867,14 +498,12 @@ def chat():
 
 
         # Lógica según la intención
-        if intent in ["search_product", "search_non_tile_products"]:
+        if intent in "search_collection":
             print(f"🪴 Intent: {intent}")
-            session_memory.setdefault(session_id, {})["last_product_query"] = user_message
-            session_memory[session_id]["last_intent"] = "search_product"
-            response_text = get_product_recommendations(
+            session_memory.setdefault(session_id, {})["last_collection_query"] = user_message
+            session_memory[session_id]["last_intent"] = "search_collection"
+            response_text = get_collection_recommendations(
                 user_message,
-                intent=intent,
-                context=context_tag,
                 session_id=session_id,
                 user_message_count=user_message_count
             )
@@ -882,7 +511,45 @@ def chat():
         elif intent == "search_blog":
             print("📰 Intent: search_blog (from articles.json)")
             response_text = search_shopify_blogs(user_message, session_id=session_id, user_message_count=user_message_count)
+        
+        elif intent == "faqs":
+            try:
+                faq = search_faq_semantic(user_message)
+                print("📖 FAQ Match:", faq)
 
+                if faq:
+                    # ✅ Intros aleatorias integradas (sin OpenAI)
+                    intros = [
+                        "Here's a quick answer that might help 👇",
+                        "Check this out, it might be just what you need.",
+                        "Gotcha! This FAQ explains it:",
+                        "Let’s clear that up real quick:",
+                        "This one’s for you 👇",
+                        "Quick guide to help you out:",
+                        "This might be exactly what you were wondering.",
+                        "Easy fix! Check this FAQ 👇",
+                    ]
+                    intro_text = random.choice(intros)
+
+                    # 🧾 Estilo simple tipo blogs
+                    response_text = f"{intro_text}<br><br>"
+                    response_text += f"📌 <b>{faq['title']}</b><br>{faq['subtitle']}<br>"
+                    response_text += f"<a href='{faq['url']}' target='_blank' style='color: #007bff; text-decoration: underline;'>View article</a><br><br>"
+
+                    return jsonify({"answer": response_text, "intent": intent})
+
+                else:
+                    return jsonify({
+                        "answer": "Hmm 🤔 I didn't find a precise answer in our FAQ. Can you rephrase?",
+                        "intent": intent
+                    })
+
+            except Exception as e:
+                print("❌ Error en search_faq_semantic:", e)
+                return jsonify({
+                    "answer": "Internal error while searching FAQs.",
+                    "intent": intent
+                })
         elif intent in ["contact", "studio", "book", "returns_info", "shipping", "trade", "our_story", "search_pages"]:
             print(f"📄 Intent: {intent}")
             session_memory.setdefault(session_id, {})["last_pages_query"] = user_message
