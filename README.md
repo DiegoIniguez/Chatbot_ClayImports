@@ -1,95 +1,97 @@
-# 🧠 ClayBot — AI Chatbot for ClayImports
 
-**ClayBot** is an intelligent assistant designed to help ClayImports customers discover products, find answers, navigate store policies, blogs, and more. It combines scraping, machine learning, session memory, and OpenAI to deliver smart, human-like support.
+# 🧱 ClayBot - Proyecto Inteligente para Shopify Support
 
----
-
-## 🚀 Features
-
-- 🔍 Product search by intent, tags, context, and semantic similarity
-- 🧠 Intent classification using Naive Bayes (`sklearn`)
-- 📄 Page and product scraping (including rich USAGE info)
-- ✨ Auto summaries with OpenAI (`gpt-4o-mini`)
-- 📊 Weekly learning pipeline from Google Sheets logs
-- 🧩 Visual product carousels with emojis
-- 🧠 Lightweight session memory (no repetitions)
-- 📝 Logs all interactions and unanswered questions
+Bienvenido al proyecto **ClayBot**, un chatbot inteligente diseñado para mejorar la atención al cliente y navegación de productos en tiendas Shopify.
 
 ---
 
-## 📁 Project Structure
+## 📦 Estructura General del Proyecto
+
+| Categoría | Archivos | Descripción |
+|----------|----------|-------------|
+| 🤖 Core Bot | `server.py`, `bot.py` | Backend principal del chatbot |
+| 🧠 Intent ML | `weekly_learning.py`, `check_duplicates.py`, `intent_model.joblib`, `training_data.json` | Clasificador de intención con aprendizaje semanal |
+| 🧱 Colecciones/Productos | `export_collections_and_products.py`, `generate_collection_descriptions.py`, `regenerate_cache.py`, `products.json`, `collections_described.json`, `cached_collections.joblib` | Extracción y enriquecimiento de colecciones con OpenAI |
+| 📄 Informational Pages | `utils.py`, `pages.json` | Descarga y cacheo de páginas de ayuda desde Shopify |
+| 📰 Blog | `build_articles.py`, `articles.json` | Descarga y cacheo de artículos del blog de Shopify |
+| 🔎 Page Matching | `page_scraper.py`, `smart_page_router.py` | Busca, scrapea y resume páginas de ayuda según intención |
+| ⚙️ Automatización | `run_pipeline.py` | Ejecuta todo el flujo de entrenamiento, exportación y actualización |
+| 🔐 Accesos | `google_credentials.json` | Registro de logs en Google Sheets |
+| 🧹 Utilidades | `.gitignore`, `cleanup_vscode.sh` | Herramientas de entorno (opcional) |
+
+---
+
+## ✅ Flujo Recomendado (Manual o Automatizado)
+
+### 🔁 Opción A: Todo automático
+```bash
+python3 run_pipeline.py
+```
+
+Este comando corre en orden:
+1. 🧠 Reentrena intención (`weekly_learning.py`)
+2. 🔍 Verifica duplicados (`check_duplicates.py`)
+3. 🧱 Exporta datos (`export_collections_and_products.py`)
+4. 🧠 Genera descripciones IA (`generate_collection_descriptions.py`)
+5. 💾 Regenera caché del bot (`regenerate_cache.py`)
+6. 📰 Actualiza artículos del blog (`build_articles.py`)
+
+---
+
+### 🧪 Opción B: Ejecución manual paso por paso
 
 ```bash
-├── server.py                 # Flask API with main response logic
-├── weekly_learning.py        # Weekly model trainer from logs
-├── smart_page_router.py      # Smart router for help pages
-├── utils.py                  # Shopify helper functions
-├── page_scraper.py           # Scraper + embeddings + summarizer
-├── scrape_clay_product.py    # Scraper for product + usage section
-├── export_products.py        # Export all active products from Shopify
-├── build_articles.py         # Export blog articles to articles.json
-├── .gitignore                # Ignored files and folders
-└── README.md                 # This file 📄
+python3 weekly_learning.py
+python3 check_duplicates.py
+python3 export_collections_and_products.py
+python3 generate_collection_descriptions.py
+python3 regenerate_cache.py
+python3 build_articles.py
 ```
 
 ---
 
-## 🛠️ How to Run
+## 🧠 Matching y scraping de páginas
 
-### 🧪 Local Testing
+ClayBot usa `page_scraper.py` y `smart_page_router.py` como módulos internos para:
 
-```bash
-cd /opt/chatbot
-python3 server.py
-```
+- Scrapear contenido real de páginas Shopify (`/pages/...`).
+- Limpiar HTML y contenido irrelevante.
+- Resumir el contenido con OpenAI usando `text-embedding-3-small` y `gpt-4o-mini`.
+- Mostrar el resumen al usuario con un enlace.
 
-### 🚀 Production with Gunicorn
+Esto ocurre automáticamente cuando un intent como `contact`, `shipping`, `our_story` o `search_pages` se detecta.
 
-```bash
-gunicorn server:app --bind 0.0.0.0:5000
-```
+🔒 No necesitas correr estos scripts manualmente. Ya están integrados dentro del flujo de `server.py`.
 
 ---
 
-## 🔐 Required Environment Variables
+## 📁 Archivos Generados Clave
 
-Create a `.env` file (not included in the repo):
-
-```env
-SHOPIFY_API_KEY=your_shopify_token
-SHOPIFY_STORE_URL=https://clayimports.myshopify.com
-OPENAI_API_KEY=sk-...
-```
-
----
-
-## 📦 Dependencies
-
-- Python 3.10+
-- Flask, Flask-CORS
-- requests, joblib, sklearn, gspread
-- OpenAI SDK
-- BeautifulSoup4
-- cachetools
-- python-dotenv
-
-### Install all with:
-
-```bash
-pip install -r requirements.txt
-```
+- `collections.json` → export desde Shopify
+- `products.json` → productos activos
+- `collections_described.json` → colecciones enriquecidas
+- `cached_collections.joblib` → caché del bot
+- `intent_model.joblib` → clasificador actualizado
+- `articles.json`, `pages.json` → contenido útil cacheado
 
 ---
 
-## 🧠 Machine Learning
+## ⚠️ Notas Importantes
 
-- Classifier: `intent_model.joblib`
-- Dataset: `training_data.json`
-- Training script: `weekly_learning.py`
-- Powered by: `TfidfVectorizer + MultinomialNB`
+- **No borres `cached_collections.joblib`** a menos que lo regeneres.
+- **Revisa `google_credentials.json` y tus variables de entorno antes de correr.**
+- `utils.py` actualiza `pages.json` automáticamente desde `server.py`.
+- No necesitas correr `page_scraper.py` manualmente. Está conectado a `search_shopify_pages()`.
 
 ---
 
-## 👤 Author
+## 🧠 ¿Qué sigue?
 
-Built with 💛 by [@DiegoIniguez](https://github.com/DiegoIniguez) for ClayImports.
+- Generar `collection_embeddings.json` para hacer matching semántico.
+- Mejorar `run_pipeline.py` con lógica condicional y logging bonito.
+- Sincronizar descripciones generadas con Shopify vía API si lo deseas.
+
+---
+
+Hecho con ❤️ para Clay Imports.
