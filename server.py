@@ -43,7 +43,7 @@ def get_cached_collections(force_refresh=False):
         except:
             pass
 
-    print("💾 Cache no encontrada o forzada. Cargando colecciones desde Shopify...")
+    print("💾 Cache not found or forced. Loading collections from Shopify...")
     collections = []
     endpoints = ["custom_collections", "smart_collections"]
 
@@ -89,19 +89,19 @@ def should_refresh_collections():
         print(f"❌ Error checking cache age: {e}")
         return True
 
-# Memoria por sesión con duración limitada (1 hora)
-session_memory = TTLCache(maxsize=1000, ttl=3600)  # 1000 sesiones, expiran a la hora
+# Memory per session (1 hour)
+session_memory = TTLCache(maxsize=1000, ttl=3600)  # 1000 sessions, expire in one hour
 
 
-# 🔤 Dataset de entrenamiento para clasificación de intención
+# 🔤 Training dataset for intent classification
 MODEL_FILE = "intent_model.joblib"
 
 try:
     intent_model = joblib.load(MODEL_FILE)
-    print("✅ Modelo de intención cargado exitosamente.")
+    print("✅ Intent model loaded successfully.")
 except Exception as e:
-    print(f"❌ No se pudo cargar el modelo entrenado: {e}")
-    # Fallback a modelo simple vacío
+    print(f"❌ The trained model could not be loaded: {e}")
+    # Fallback to simple empty model
     from sklearn.pipeline import make_pipeline
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.naive_bayes import MultinomialNB
@@ -127,15 +127,15 @@ def is_close_match(title, message, threshold=0.85):
 
 def log_user_interaction(user_message, bot_response, intent=""):
     try:
-        # Autenticación con la hoja de Google
+        # Authentication with Google Sheets
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_name("google_credentials.json", scope)
         client = gspread.authorize(creds)
 
-        # Acceder a la hoja
+        # Access to the page
         sheet = client.open("Chatbot logs").sheet1  # Usamos la primer hoja
 
-        # Agregar la conversación como nueva fila
+        # Add conversation as a new row
         sheet.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             user_message,
@@ -143,9 +143,9 @@ def log_user_interaction(user_message, bot_response, intent=""):
             bot_response
         ])
 
-        print("✅ Conversación registrada en Google Sheets.")
+        print("✅ Conversation recorded in Google Sheets.")
     except Exception as e:
-        print(f"❌ Error al guardar en Google Sheets: {e}")
+        print(f"❌ Error saving in Google Sheets: {e}")
 
 def get_shop_info():
     url = f"{shopify_store_url}/admin/api/2024-01/shop.json"
@@ -178,7 +178,6 @@ def get_blog_pages():
     blog_pages = []
 
     for blog in blogs:
-        # Ya filtraste published_at antes, así que aquí va directo
         blog_pages.append({
             "handle": blog["handle"],
             "title": blog["title"],
@@ -207,7 +206,7 @@ def search_shopify_blogs(user_message, session_id="default", user_message_count=
         body = normalize(b.get("content", ""))
         content = f"{title} {body}"
 
-        # Puntuación personalizada
+        # Custom scoring
         match_score = 0
         keywords = query.split()
         strong_match_found = False
@@ -249,7 +248,7 @@ def search_shopify_blogs(user_message, session_id="default", user_message_count=
     shown_blogs = session_data.setdefault("shown_blogs", set())
     shown_blogs.update(b["url"] for b in top_blogs)
 
-    # Intro con OpenAI
+    # Intro with OpenAI
     try:
         print("🧠 Llamando a OpenAI para intro de blogs...")
         prompt = (
@@ -269,7 +268,7 @@ def search_shopify_blogs(user_message, session_id="default", user_message_count=
         print(f"⚠️ OpenAI intro failed: {e}")
         intro_text = "Here are some blog articles you might find helpful:"
 
-   # 📰 Construir respuesta final
+   # Build final response
     response_text = f"{intro_text}<br><br>"
     for b in top_blogs:
         title = b["title"]
@@ -291,12 +290,12 @@ def normalize(text):
     return text
 
 
-def clean_title(title):
+def clean_title(title): # regex
     title = title.lower()
-    title = re.sub(r'\|.*$', '', title)  # corta todo después del "|"
-    title = re.sub(r'(\d+)\s*["’]?\s*[x×]\s*(\d+)', r'\1x\2', title)  # 4" x 4" → 4x4
-    title = re.sub(r'[^a-z0-9\s\.x]', '', title)  # remueve simbolitos
-    title = re.sub(r'\s+', ' ', title)  # espacios dobles
+    title = re.sub(r'\|.*$', '', title)
+    title = re.sub(r'(\d+)\s*["’]?\s*[x×]\s*(\d+)', r'\1x\2', title)
+    title = re.sub(r'[^a-z0-9\s\.x]', '', title)
+    title = re.sub(r'\s+', ' ', title)
     return title.strip()
 
 
@@ -317,10 +316,10 @@ def get_collection_recommendations(user_message, session_id="default", user_mess
         image_url = coll.get("image", {}).get("src", "")
 
         if not image_url:
-            continue  # ❌ Saltar colecciones sin imagen
+            continue  # Ignore collections without image
 
         if coll.get("product_count", 0) == 0:
-            continue  # ❌ Saltar colecciones vacías
+            continue  # Ignore empty collections
 
         if handle in shown_handles:
             continue
@@ -334,11 +333,11 @@ def get_collection_recommendations(user_message, session_id="default", user_mess
             if word in body:
                 match_score += 2
 
-        # NUEVO: matching por títulos de productos relacionados
+        # matching by related product titles
         product_titles = [pt.lower() for pt in coll.get("product_titles", [])]
         for word in user_keywords:
             if any(word in pt for pt in product_titles):
-                match_score += 3  # o el peso que tú creas justo
+                match_score += 3
 
         similarity = SequenceMatcher(None, normalize(user_message), title).ratio()
 
@@ -357,7 +356,7 @@ def get_collection_recommendations(user_message, session_id="default", user_mess
     shown_collections = session_data.setdefault("shown_collections", set())
     shown_collections.update(c["collection"]["handle"] for c in top_collections)
 
-    # 🔥 Generar introducción usando OpenAI
+    # OpenAI intro
     try:
         prompt = (
             "You are a friendly tile store assistant. Based on the customer's message, "
@@ -376,7 +375,7 @@ def get_collection_recommendations(user_message, session_id="default", user_mess
         print(f"⚠️ OpenAI intro failed: {e}")
         intro_text = "Here are some collections you might love!"
 
-    # 🛠️ Construir respuesta visual
+    # Build visual response
     response_text = f"{intro_text}<br><div class='product-carousel' style='display: flex; gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 10px 0;'>"
 
     for item in top_collections:
@@ -403,7 +402,7 @@ def get_collection_recommendations(user_message, session_id="default", user_mess
     return response_text
 
 def detect_context(user_message):
-    """Detecta si el usuario pregunta sobre un espacio específico (cocina, baño, restaurante, etc.)."""
+    """Detects if the user asks about a specific space (kitchen, bathroom, restaurant, etc.)."""
     kitchen_keywords = ["kitchen", "cooking", "dining"]
     bathroom_keywords = ["bathroom", "shower", "sink"]
     restaurant_keywords = ["restaurant", "café", "bar", "dining area"]
@@ -450,14 +449,14 @@ def log_unanswered_question(user_message, bot_response):
         creds = ServiceAccountCredentials.from_json_keyfile_name("google_credentials.json", scope)
         client = gspread.authorize(creds)
 
-        # Segunda pestaña (sheet2)
+        # Second tab (sheet2)
         sheet = client.open("Chatbot logs").get_worksheet(1)
 
-        # Nueva fila con timestamp, pregunta y respuesta generada
+        # New row with timestamp, question and generated answer
         sheet.append_row([
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             user_message,
-            "unknown",  # Intento no detectado
+            "unknown",  # Failed intent detected
             bot_response
         ])
 
@@ -468,7 +467,7 @@ def log_unanswered_question(user_message, bot_response):
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    print("🚀 /chat endpoint called")  # Verificamos si el endpoint se activa
+    print("🚀 /chat endpoint called")
 
     try:
         data = request.json
@@ -476,8 +475,8 @@ def chat():
         print("📩 Raw request data:", data)
 
         user_message = data.get("message", "").strip().lower()
-        user_message = re.sub(r'[\"“”]', '', user_message)  # elimina comillas
-        user_message = re.sub(r'\s+', ' ', user_message)  # espacios dobles
+        user_message = re.sub(r'[\"“”]', '', user_message)
+        user_message = re.sub(r'\s+', ' ', user_message)
         
         session_id = data.get("session_id", "default")
         
@@ -496,8 +495,7 @@ def chat():
 
         shop_context = f"Store name: {get_shop_info().get('name', 'Unknown')}, Currency: {get_shop_info().get('currency', 'N/A')}"
 
-
-        # Lógica según la intención
+        # Logic according to intention
         if intent in "search_collection":
             print(f"🪴 Intent: {intent}")
             session_memory.setdefault(session_id, {})["last_collection_query"] = user_message
@@ -518,7 +516,7 @@ def chat():
                 print("📖 FAQ Match:", faq)
 
                 if faq:
-                    # ✅ Intros aleatorias integradas (sin OpenAI)
+                    # Built in random intros (no OpenAI = less tokens used)
                     intros = [
                         "Here's a quick answer that might help 👇",
                         "Check this out, it might be just what you need.",
@@ -531,7 +529,6 @@ def chat():
                     ]
                     intro_text = random.choice(intros)
 
-                    # 🧾 Estilo simple tipo blogs
                     response_text = f"{intro_text}<br><br>"
                     response_text += f"📌 <b>{faq['title']}</b><br>{faq['subtitle']}<br>"
                     response_text += f"<a href='{faq['url']}' target='_blank' style='color: #007bff; text-decoration: underline;'>View article</a><br><br>"

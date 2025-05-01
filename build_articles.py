@@ -54,7 +54,7 @@ def get_blog_articles(blog_id, blog_handle):
 def save_articles(data):
     with open("articles.json", "w") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
-    print(f"✅ Artículos guardados: {len(data)} en articles.json")
+    print(f"✅ Saved articles: {len(data)} in articles.json")
 
 if __name__ == "__main__":
     all_articles = []
@@ -62,7 +62,7 @@ if __name__ == "__main__":
     for blog_id in blog_ids:
         print(f"🔍 Fetching articles for blog ID {blog_id}")
 
-        # Obtener el handle del blog
+        # Get blog handle
         blog_resp = requests.get(f"{SHOPIFY_STORE_URL}/admin/api/2024-01/blogs/{blog_id}.json", headers=HEADERS)
         if blog_resp.status_code != 200:
             print(f"❌ Could not get blog handle for {blog_id}")
@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
         blog_handle = blog_resp.json().get("blog", {}).get("handle", "news")
 
-        # Obtener artículos con ese handle
+        # Get articles based on handle
         articles = get_blog_articles(blog_id, blog_handle)
         all_articles.extend(articles)
 

@@ -14,13 +14,12 @@ def hash_file(path):
     except FileNotFoundError:
         return None
 
-# Guarda el hash previo para detectar cambios
 HASH_PATH = "collections_described.hash"
 
 def should_regenerate_cache():
     current_hash = hash_file("collections_described.json")
     if not current_hash:
-        print("⚠️ No se encontró collections_described.json.")
+        print("⚠️ Couldn't find collections_described.json.")
         return False
 
     if not os.path.exists(HASH_PATH):
@@ -36,10 +35,9 @@ def should_regenerate_cache():
             f.write(current_hash)
         return True
 
-    print("💾 No hay cambios en collections_described.json. Omitiendo regeneración de cache.")
+    print("💾 No changes to collections_described.json. Skipping cache regeneration.")
     return False
 
-# Crear log de ejecución
 log_file = f"pipeline_log_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
 
 def run_script(label, script):
@@ -63,17 +61,17 @@ pipeline = [
 
 results = []
 
-# Ejecutar scripts normales
+# Run normal scripts
 for label, script in pipeline:
     result = run_script(label, script)
     results.append(result)
 
-# Regenerar caché solo si collections_described.json cambió
+# Regenerate cache only if collections_described.json changed
 if should_regenerate_cache():
     result = run_script("💾 Regenerate Cache", "regenerate_cache.py")
     results.append(result)
 
-# Guardar log
+# Save log
 with open(log_file, "w") as log:
     for line in results:
         log.write(line + "\n")
