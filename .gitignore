@@ -1,17 +1,17 @@
-# 🧹 Entornos virtuales y caché
+# 🧹 Virtual Environments and Cache
 venv/
 __pycache__/
 *.pyc
 
-# 📦 Archivos de modelo y caché
+# 📦 Model and cache files
 *.joblib
 embedding_cache*
 *.log
 *.txt
 
-# 📄 Archivos JSON generados automáticos
+# 📄 Automatically generated JSON files
 *.json
 
-# ❗ Excepciones que sí quieres incluir en el repo:
+# ❗Exceptions to include in repo:
 !training_data.json
 !scraped_usages.json

@@ -7,12 +7,12 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import classification_report
 import joblib
 
-# 📁 ARCHIVO DE DATOS
+# 📁 DATA FILES
 TRAINING_FILE = "training_data.json"
 MODEL_FILE = "intent_model.joblib"
 GOOGLE_SHEET_NAME = "Chatbot logs"
 
-# 🔐 AUTENTICACIÓN GOOGLE SHEETS
+# 🔐 GOOGLE SHEETS AUTHENTICATION
 def load_logs():
     scope = [
         "https://spreadsheets.google.com/feeds",
@@ -23,7 +23,7 @@ def load_logs():
     sheet = client.open(GOOGLE_SHEET_NAME).sheet1
     return sheet.get_all_records()
 
-# 📊 CARGAR EJEMPLOS EXISTENTES
+# 📊 LOAD EXISTING EXAMPLES
 def load_existing_examples():
     try:
         with open(TRAINING_FILE, "r") as f:
@@ -31,9 +31,9 @@ def load_existing_examples():
     except FileNotFoundError:
         return []
 
-# 🧠 DETECTAR EJEMPLOS NUEVOS
+# 🧠 DETECT NEW EXAMPLES
 def extract_new_training_examples(logs, known_examples):
-    # Recolectar todos los textos ya conocidos desde el formato agrupado
+    # Collect all known texts from grouped format
     known_phrases = set()
     for group in known_examples:
         known_phrases.update(group["examples"])
@@ -47,7 +47,7 @@ def extract_new_training_examples(logs, known_examples):
     return new_data
 
 
-# 💾 GUARDAR EN ARCHIVO JSON
+# 💾 SAVED INTO A JSON FILE
 def append_to_training_data(new_examples, existing):
     intent_map = {group["intent"]: set(group["examples"]) for group in existing}
 
@@ -57,13 +57,13 @@ def append_to_training_data(new_examples, existing):
         else:
             intent_map[intent] = {msg}
 
-    # Volver a formato de lista para guardar
+    # Return to list format to save
     updated_data = [{"intent": intent, "examples": list(examples)} for intent, examples in intent_map.items()]
 
     with open(TRAINING_FILE, "w") as f:
         json.dump(updated_data, f, indent=2)
 
-    print(f"✅ {len(new_examples)} nuevos ejemplos añadidos al training_data.json")
+    print(f"✅ {len(new_examples)} new examples added to training_data.json")
 
 
 def retrain_intent_model(training_data):
@@ -79,19 +79,17 @@ def retrain_intent_model(training_data):
     model.fit(X, y)
 
     joblib.dump(model, MODEL_FILE)
-    print(f"🎉 Modelo reentrenado y guardado como {MODEL_FILE}")
+    print(f"🎉 Model retrained and saved as {MODEL_FILE}")
 
-    return model, X, y  # ← 🔥 Retornamos para evaluar luego
+    return model, X, y
 
-
-
-# 🚀 FLUJO PRINCIPAL
+# 🚀 MAIN FLOW
 def main():
-    print("🔄 Iniciando entrenamiento semanal...")
+    print("🔄 Starting weekly training...")
     logs = load_logs()
     existing = load_existing_examples()
     new_examples = extract_new_training_examples(logs, existing)
-    print(f"🆕 Nuevos ejemplos detectados: {len(new_examples)}")
+    print(f"🆕 New examples added: {len(new_examples)}")
     for msg, intent in new_examples:
         print(f"➕ {msg} → {intent}")
 
@@ -100,13 +98,12 @@ def main():
         append_to_training_data(new_examples, existing)
         model, X, y = retrain_intent_model(existing + new_examples)
     else:
-        print("📭 No se encontraron nuevos ejemplos para añadir.")
+        print("📭 No new examples were found to add.")
         model, X, y = retrain_intent_model(existing)
 
-    # Ahora sí puedes imprimir el reporte
-    print("\n📊 Modelo de intención entrenado:")
+    print("\n📊 Trained intent model:")
     print(classification_report(y, model.predict(X)))
 
 if __name__ == "__main__":
     main()
-    print(f"\n📚 Total ejemplos en training_data.json: {len(load_existing_examples())}")
+    print(f"\n📚 Total examples in training_data.json: {len(load_existing_examples())}")

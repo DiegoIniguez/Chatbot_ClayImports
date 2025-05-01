@@ -6,14 +6,14 @@ from tqdm import tqdm
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Cargar colecciones y productos
+# Load collections and products
 with open("collections.json", "r", encoding="utf-8") as f:
     collections = json.load(f)
 
 with open("products.json", "r", encoding="utf-8") as f:
     products = json.load(f)
 
-# Indexar productos por tag
+# Index products by tag
 tag_to_products = {}
 for product in products:
     product_tags = product.get("tags", "").split(", ")
@@ -39,20 +39,20 @@ Highlight the overall feel, style, or applications without naming individual pro
         print(f"❌ Error generating description: {e}")
         return ""
 
-# Generar descripciones
+# Generate descriptions
 updated = 0
 for collection in tqdm(collections, desc="🔄 Generando descripciones"):
     matched_products = []
     rules = collection.get("rules", [])
 
-    # 1. Buscar productos por reglas de tag (colecciones automáticas)
+    # 1. Search for products by tag rules (automatic collections)
     if rules:
         for rule in rules:
             if rule["column"] == "tag":
                 tag = rule["condition"].strip().lower()
                 matched_products.extend(tag_to_products.get(tag, []))
 
-    # 2. Si no hay reglas (colecciones manuales), buscar por coincidencia de título
+    # 2. If there are no rules search by title match (manual collections)
     if not matched_products:
         title_keywords = collection.get("title", "").lower().split()
         for product in products:
@@ -60,7 +60,7 @@ for collection in tqdm(collections, desc="🔄 Generando descripciones"):
             if all(word in product_title for word in title_keywords if len(word) > 3):
                 matched_products.append(product)
 
-    # 3. Guardar conteo y títulos
+    # 3. Save
     collection["product_count"] = len(matched_products)
     collection["product_titles"] = [p["title"] for p in matched_products]
 
@@ -70,8 +70,8 @@ for collection in tqdm(collections, desc="🔄 Generando descripciones"):
             collection["body_html"] = desc
             updated += 1
 
-# Guardar colección enriquecida
+# Save enriched collection
 with open("collections_described.json", "w", encoding="utf-8") as f:
     json.dump(collections, f, indent=2, ensure_ascii=False)
 
-print(f"✅ Descripciones generadas para {updated} colecciones.")
+print(f"✅ Descriptions generated for {updated} collections.")

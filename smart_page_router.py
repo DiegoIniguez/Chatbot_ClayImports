@@ -3,7 +3,7 @@ import os
 from utils import get_shopify_pages
 from difflib import SequenceMatcher
 
-# Para intents que tienen página específica
+# For intents with a specific page
 DIRECT_PAGE_HANDLES = {
     "contact": "contact-book",
     "studio": "clay-sma-info-contact",
@@ -28,7 +28,7 @@ irrelevant_handles = {
 }
 
 
-shopify_store_url = "https://clayimports.myshopify.com"  # versión pública
+shopify_store_url = "https://clayimports.myshopify.com"  # public version
 
 TOP_SCORE_MARGIN = 0.025
 

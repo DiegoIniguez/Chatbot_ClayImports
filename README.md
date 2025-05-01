@@ -1,44 +1,43 @@
 
-# 🧱 ClayBot - Proyecto Inteligente para Shopify Support
+# 🧱 ClayBot - AI and ML Project for Shopify Support
 
-Bienvenido al proyecto **ClayBot**, un chatbot inteligente diseñado para mejorar la atención al cliente y navegación de productos en tiendas Shopify.
+Welcome to the **ClayBot** project, an intelligent chatbot designed to improve customer service and collection navigation in Shopify stores.
 
 ---
 
-## 📦 Estructura General del Proyecto
+## 📦 General Project Structure
 
-| Categoría | Archivos | Descripción |
+| Category | Files | Description |
 |----------|----------|-------------|
-| 🤖 Core Bot | `server.py`, `bot.py` | Backend principal del chatbot |
-| 🧠 Intent ML | `weekly_learning.py`, `check_duplicates.py`, `intent_model.joblib`, `training_data.json` | Clasificador de intención con aprendizaje semanal |
-| 🧱 Colecciones/Productos | `export_collections_and_products.py`, `generate_collection_descriptions.py`, `regenerate_cache.py`, `products.json`, `collections_described.json`, `cached_collections.joblib` | Extracción y enriquecimiento de colecciones con OpenAI |
-| 📄 Informational Pages | `utils.py`, `pages.json` | Descarga y cacheo de páginas de ayuda desde Shopify |
-| 📰 Blog | `build_articles.py`, `articles.json` | Descarga y cacheo de artículos del blog de Shopify |
-| 🔎 Page Matching | `page_scraper.py`, `smart_page_router.py` | Busca, scrapea y resume páginas de ayuda según intención |
-| ⚙️ Automatización | `run_pipeline.py` | Ejecuta todo el flujo de entrenamiento, exportación y actualización |
-| 🔐 Accesos | `google_credentials.json` | Registro de logs en Google Sheets |
-| 🧹 Utilidades | `.gitignore`, `cleanup_vscode.sh` | Herramientas de entorno (opcional) |
+| 🤖 Core Bot | `server.py`, `bot.py` | Main backend of the chatbot |
+| 🧠 Intent ML | `weekly_learning.py`, `check_duplicates.py`, `intent_model.joblib`, `training_data.json` | Intent classifier with weekly learning |
+| 🧱 Collections/Products | `export_collections_and_products.py`, `generate_collection_descriptions.py`, `regenerate_cache.py`, `products.json`, `collections_described.json`, `cached_collections.joblib` | Extraction and enrichment of collections with OpenAI |
+| 📄 Informational Pages | `utils.py`, `pages.json` | Downloading and caching help pages from Shopify |
+| 📰 Blog | `build_articles.py`, `articles.json` | Downloading and caching Shopify blog posts |
+| 🔎 Page Matching | `page_scraper.py`, `smart_page_router.py` | Search, scrape, and summarize help pages by intent |
+| ⚙️ Automation | `run_pipeline.py` |Runs the entire training, export, and update flow |
+| 🔐 Access | `google_credentials.json` | Logging in Google Sheets |
+| 🧹 Utilities | `.gitignore`, `cleanup_vscode.sh` | Environment tools (optional) |
 
 ---
 
-## ✅ Flujo Recomendado (Manual o Automatizado)
+## ✅ Recommended Flow (Manual or Automated)
 
-### 🔁 Opción A: Todo automático
+### 🔁 Option A: Automated
 ```bash
 python3 run_pipeline.py
 ```
-
-Este comando corre en orden:
-1. 🧠 Reentrena intención (`weekly_learning.py`)
-2. 🔍 Verifica duplicados (`check_duplicates.py`)
-3. 🧱 Exporta datos (`export_collections_and_products.py`)
-4. 🧠 Genera descripciones IA (`generate_collection_descriptions.py`)
-5. 💾 Regenera caché del bot (`regenerate_cache.py`)
-6. 📰 Actualiza artículos del blog (`build_articles.py`)
+This command runs in order:
+1. 🧠 Retrain intention (`weekly_learning.py`)
+2. 🔍 Verifies duplicates (`check_duplicates.py`)
+3. 🧱 Exports data (`export_collections_and_products.py`)
+4. 🧠 Generates AI descriptions (`generate_collection_descriptions.py`)
+5. 💾 Regenerate bot cache (`regenerate_cache.py`)
+6. 📰 Updates blog articles (`build_articles.py`)
 
 ---
 
-### 🧪 Opción B: Ejecución manual paso por paso
+### 🧪 Option B: Manual
 
 ```bash
 python3 weekly_learning.py
@@ -51,47 +50,46 @@ python3 build_articles.py
 
 ---
 
-## 🧠 Matching y scraping de páginas
+## 🧠 Page matching and scraping
 
-ClayBot usa `page_scraper.py` y `smart_page_router.py` como módulos internos para:
+ClayBot uses `page_scraper.py` and `smart_page_router.py` as internal modules to:
 
-- Scrapear contenido real de páginas Shopify (`/pages/...`).
-- Limpiar HTML y contenido irrelevante.
-- Resumir el contenido con OpenAI usando `text-embedding-3-small` y `gpt-4o-mini`.
-- Mostrar el resumen al usuario con un enlace.
+- Scrape real content from Shopify pages (`/pages/...`).
+- Clean up HTML and irrelevant content.
+- Summarizing content with OpenAI using `text-embedding-3-small` and `gpt-4o-mini`.
+- Display the summary to the user with a link.
 
-Esto ocurre automáticamente cuando un intent como `contact`, `shipping`, `our_story` o `search_pages` se detecta.
+This happens automatically when an intent like `contact`, `shipping`, `our_story` or `search_pages` is detected.
 
-🔒 No necesitas correr estos scripts manualmente. Ya están integrados dentro del flujo de `server.py`.
-
----
-
-## 📁 Archivos Generados Clave
-
-- `collections.json` → export desde Shopify
-- `products.json` → productos activos
-- `collections_described.json` → colecciones enriquecidas
-- `cached_collections.joblib` → caché del bot
-- `intent_model.joblib` → clasificador actualizado
-- `articles.json`, `pages.json` → contenido útil cacheado
+🔒 You don't need to run these scripts manually. They're already integrated into the workflow `server.py`.
 
 ---
 
-## ⚠️ Notas Importantes
+## 📁 Generated Key Files
 
-- **No borres `cached_collections.joblib`** a menos que lo regeneres.
-- **Revisa `google_credentials.json` y tus variables de entorno antes de correr.**
-- `utils.py` actualiza `pages.json` automáticamente desde `server.py`.
-- No necesitas correr `page_scraper.py` manualmente. Está conectado a `search_shopify_pages()`.
-
----
-
-## 🧠 ¿Qué sigue?
-
-- Generar `collection_embeddings.json` para hacer matching semántico.
-- Mejorar `run_pipeline.py` con lógica condicional y logging bonito.
-- Sincronizar descripciones generadas con Shopify vía API si lo deseas.
+- `collections.json` → export from Shopify
+- `products.json` → active products
+- `collections_described.json` → enriched collections
+- `cached_collections.joblib` → bot cache
+- `intent_model.joblib` → updated classifier
+- `articles.json`, `pages.json` → useful cached content
 
 ---
 
-Hecho con ❤️ para Clay Imports.
+## ⚠️ IMPORTANT NOTES
+
+- **Do not delete `cached_collections.joblib`** unless you regenerate it.
+- **Check `google_credentials.json` and your environment variables before running.**
+- `utils.py` updates `pages.json` automatically from `server.py`.
+- No need to run `page_scraper.py` manually. It is connected to `search_shopify_pages()`.
+
+---
+
+## 🧠 What's next?
+
+- Improve `collection_embeddings.json` for semantic matching.
+- Improve `run_pipeline.py` with conditional logic.
+
+---
+
+Made with ❤️ for Clay Imports.

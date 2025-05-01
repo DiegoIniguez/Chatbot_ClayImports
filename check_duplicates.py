@@ -3,7 +3,7 @@ from collections import defaultdict
 from difflib import SequenceMatcher
 
 TRAINING_FILE = "training_data.json"
-SIMILARITY_THRESHOLD = 0.85  # Ajusta entre 0.7 y 0.95 según qué tan estricto quieres
+SIMILARITY_THRESHOLD = 0.85  # Adjust between 0.7 and 0.95 depending on how strict you want it
 
 def load_training_data():
     with open(TRAINING_FILE, "r") as f:

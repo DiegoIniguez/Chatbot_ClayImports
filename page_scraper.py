@@ -57,19 +57,19 @@ def scrape_shopify_page(url):
 
         soup = BeautifulSoup(response.text, "html.parser")
 
-        # 🔥 Elimina secciones irrelevantes por etiqueta
+        # Remove irrelevant sections by tag
         for tag in soup(["script", "style", "noscript", "header", "footer", "svg", "nav", "form", "button"]):
             tag.decompose()
 
-        # 🔥 Elimina secciones irrelevantes por clases sospechosas
+        # Remove irrelevant sections by classes
         blacklist = ["footer", "header", "menu", "wishlist", "share", "newsletter", "toolbar", "account", "breadcrumb"]
         for div in soup.find_all(True, {"class": lambda c: c and any(x in c.lower() for x in blacklist)}):
             div.decompose()
 
-        # ✅ Extraer texto visible
+        # Extract only visible text
         visible_text = soup.get_text(separator=" ", strip=True)
 
-        # 🧼 Limpieza básica
+        # Basic cleanup
         visible_text = re.sub(r"\s{2,}", " ", visible_text)
 
         return visible_text
@@ -104,7 +104,7 @@ def find_best_shopify_pages(query, pages):
 
         print(f"🔍 {title} — Similarity: {score:.4f}")
 
-    # Ordenar por mayor puntuación
+    # Order by score
     scored_pages.sort(key=lambda x: x[1], reverse=True)
 
     best_page = scored_pages[0][0]
