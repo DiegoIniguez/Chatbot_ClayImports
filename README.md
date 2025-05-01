@@ -1,7 +1,7 @@
 
 # 🧱 ClayBot - AI and ML Project for Shopify Support
 
-Welcome to the **ClayBot** project, an intelligent chatbot designed to improve customer service and collection navigation in Shopify stores.
+Welcome to the **ClayBot** project, an intelligent chatbot designed to improve customer service and collection navigation in Shopify stores. (NOT IN PRODUCTION YET).
 
 ---
 
