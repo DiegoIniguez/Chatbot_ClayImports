@@ -18,7 +18,7 @@ from cachetools import TTLCache
 from page_scraper import find_best_shopify_pages, get_full_page_text, summarize_page_content
 from smart_page_router import search_shopify_pages
 from utils import get_shopify_pages
-from faq_support.faq_search import search_faq_semantic
+from faq_support.faq_search import get_best_faq_answer
 
 app = Flask(__name__)
 CORS(app)
@@ -512,41 +512,19 @@ def chat():
         
         elif intent == "faqs":
             try:
-                faq = search_faq_semantic(user_message)
-                print("📖 FAQ Match:", faq)
-
-                if faq:
-                    # Built in random intros (no OpenAI = less tokens used)
-                    intros = [
-                        "Here's a quick answer that might help 👇",
-                        "Check this out, it might be just what you need.",
-                        "Gotcha! This FAQ explains it:",
-                        "Let’s clear that up real quick:",
-                        "This one’s for you 👇",
-                        "Quick guide to help you out:",
-                        "This might be exactly what you were wondering.",
-                        "Easy fix! Check this FAQ 👇",
-                    ]
-                    intro_text = random.choice(intros)
-
-                    response_text = f"{intro_text}<br><br>"
-                    response_text += f"📌 <b>{faq['title']}</b><br>{faq['subtitle']}<br>"
-                    response_text += f"<a href='{faq['url']}' target='_blank' style='color: #007bff; text-decoration: underline;'>View article</a><br><br>"
-
-                    return jsonify({"answer": response_text, "intent": intent})
-
-                else:
-                    return jsonify({
-                        "answer": "Hmm 🤔 I didn't find a precise answer in our FAQ. Can you rephrase?",
-                        "intent": intent
-                    })
-
-            except Exception as e:
-                print("❌ Error en search_faq_semantic:", e)
+                faq_response = get_best_faq_answer(user_message)
                 return jsonify({
-                    "answer": "Internal error while searching FAQs.",
+                    "answer": faq_response["answer"],
+                    "source": faq_response.get("source", "unknown"),
                     "intent": intent
                 })
+            except Exception as e:
+                print(f"❌ Error during FAQ lookup: {e}")
+                return jsonify({
+                    "answer": "Hmm 🤔 I couldn't find an answer right now. Try again in a moment.",
+                    "intent": intent
+                })
+
         elif intent in ["contact", "studio", "book", "returns_info", "shipping", "trade", "our_story", "search_pages"]:
             print(f"📄 Intent: {intent}")
             session_memory.setdefault(session_id, {})["last_pages_query"] = user_message
