@@ -1,7 +1,8 @@
 
 # 🧱 ClayBot - AI and ML Project for Shopify Support
 
-Welcome to the **ClayBot** project, an intelligent chatbot designed to improve customer service and collection navigation in Shopify stores. (NOT IN PRODUCTION YET).
+Welcome to **ClayBot**, a smart, evolving chatbot built for **Clay Imports**. It boosts customer service in Shopify with semantic search, weekly training, real-time scraping, and OpenAI integration.  
+> 🧪 Currently under development – **not live in production**.
 
 ---
 
@@ -13,6 +14,7 @@ Welcome to the **ClayBot** project, an intelligent chatbot designed to improve c
 | 🧠 Intent ML | `weekly_learning.py`, `check_duplicates.py`, `intent_model.joblib`, `training_data.json` | Intent classifier with weekly learning |
 | 🧱 Collections/Products | `export_collections_and_products.py`, `generate_collection_descriptions.py`, `regenerate_cache.py`, `products.json`, `collections_described.json`, `cached_collections.joblib` | Extraction and enrichment of collections with OpenAI |
 | 📄 Informational Pages | `utils.py`, `pages.json` | Downloading and caching help pages from Shopify |
+| 📄 FAQS | `faq_search.py`, `faq_embeddings.pt`, `generate_faq_embeddings.py` | Uses FAQS.json, semantic search and GPT 3.5 turbo to deliver best responses  |
 | 📰 Blog | `build_articles.py`, `articles.json` | Downloading and caching Shopify blog posts |
 | 🔎 Page Matching | `page_scraper.py`, `smart_page_router.py` | Search, scrape, and summarize help pages by intent |
 | ⚙️ Automation | `run_pipeline.py` |Runs the entire training, export, and update flow |
