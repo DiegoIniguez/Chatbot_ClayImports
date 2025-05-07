@@ -14,7 +14,7 @@ Welcome to **ClayBot**, a smart, evolving chatbot built for **Clay Imports**. It
 | 🧠 Intent ML | `weekly_learning.py`, `check_duplicates.py`, `intent_model.joblib`, `training_data.json` | Intent classifier with weekly learning |
 | 🧱 Collections/Products | `export_collections_and_products.py`, `generate_collection_descriptions.py`, `regenerate_cache.py`, `products.json`, `collections_described.json`, `cached_collections.joblib` | Extraction and enrichment of collections with OpenAI |
 | 📄 Informational Pages | `utils.py`, `pages.json` | Downloading and caching help pages from Shopify |
-| 📄 FAQS | `faq_search.py`, `faq_embeddings.pt`, `generate_faq_embeddings.py` | Uses FAQS.json, semantic search and GPT 3.5 turbo to deliver best responses  |
+| 📄 FAQS | `faq_search.py`, `generate_faq_embeddings.py`, `ClayBot FAQs (Google Sheet)` | Semantic search using MPNet, backed by GPT fallback and editable from Google Sheets |
 | 📰 Blog | `build_articles.py`, `articles.json` | Downloading and caching Shopify blog posts |
 | 🔎 Page Matching | `page_scraper.py`, `smart_page_router.py` | Search, scrape, and summarize help pages by intent |
 | ⚙️ Automation | `run_pipeline.py` |Runs the entire training, export, and update flow |
@@ -36,7 +36,7 @@ This command runs in order:
 4. 🧠 Generates AI descriptions (`generate_collection_descriptions.py`)
 5. 💾 Regenerate bot cache (`regenerate_cache.py`)
 6. 📰 Updates blog articles (`build_articles.py`)
-
+7. 📄 Updates FAQ embeddings from Google Sheets (generate_faq_embeddings.py)
 ---
 
 ### 🧪 Option B: Manual
@@ -47,7 +47,8 @@ python3 check_duplicates.py
 python3 export_collections_and_products.py
 python3 generate_collection_descriptions.py
 python3 regenerate_cache.py
-python3 build_articles.py
+python3 faq_support/scripts/generate_faq_embeddings.py
+
 ```
 
 ---
